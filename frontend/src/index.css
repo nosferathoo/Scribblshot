@@ -98,6 +98,15 @@ code {
     user-select: none;
 }
 
+/* Hide scrollbars on horizontally-scrollable toolbar (mobile overflow case) */
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
 /* Konva container hides scroll bars */
 .konva-stage canvas {
     display: block;
@@ -137,14 +146,21 @@ code {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
     border-radius: 9999px;
     color: #737373;
     transition:
         background-color 180ms ease,
         color 180ms ease,
         transform 120ms ease;
+}
+@media (min-width: 640px) {
+    .tool-pill {
+        width: 40px;
+        height: 40px;
+    }
 }
 .tool-pill:hover {
     background: rgba(0, 0, 0, 0.06);

@@ -60,9 +60,13 @@ export default function Toolbar({
   return (
     <TooltipProvider delayDuration={150}>
       <div
-        data-testid="bottom-toolbar"
-        className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-3 py-2 rounded-full bg-white/90 backdrop-blur-xl border border-black/10 shadow-[0_12px_40px_rgba(0,0,0,0.10)] float-in"
+        data-testid="bottom-toolbar-wrapper"
+        className="absolute bottom-20 inset-x-2 z-50 flex justify-center pointer-events-none"
       >
+        <div
+          data-testid="bottom-toolbar"
+          className="pointer-events-auto flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full bg-white/90 backdrop-blur-xl border border-black/10 shadow-[0_12px_40px_rgba(0,0,0,0.10)] float-in max-w-full overflow-x-auto no-scrollbar"
+        >
         {TOOLS.map(({ id, label, Icon, hint }) => (
           <Tooltip key={id}>
             <TooltipTrigger asChild>
@@ -169,6 +173,7 @@ export default function Toolbar({
             />
           </PopoverContent>
         </Popover>
+        </div>
       </div>
     </TooltipProvider>
   );
