@@ -287,6 +287,36 @@ export default function Whiteboard() {
   // ---- Pinch / two-finger pan (touch) ----
   const pinchRef = useRef({ active: false, lastDist: 0, lastCenter: null });
   const pinchAbortDrag = useRef(false);
+  // After pinch ends with fingers still on screen, ignore them until all lift
+  const postPinchRef = useRef(false);
+
+  // Stop any in-progress shape/stage drag synchronously and snap nodes back to React state
+  const stopAllDrags = () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (stage.isDragging?.()) stage.stopDrag();
+    const dragging = stage.find((n) => n.isDragging && n.isDragging()) || [];
+    if (!dragging.length) return;
+    pinchAbortDrag.current = true;
+    dragging.forEach((n) => {
+      const id = n.id();
+      const orig = lastShapesRef.current.find((sh) => sh.id === id);
+      n.stopDrag();
+      if (orig) {
+        if (n.getClassName?.() === "Ellipse") {
+          n.position({
+            x: orig.x + (orig.width || 0) / 2,
+            y: orig.y + (orig.height || 0) / 2,
+          });
+        } else if (typeof orig.x === "number" && typeof orig.y === "number") {
+          n.position({ x: orig.x, y: orig.y });
+        }
+      }
+    });
+    stage.batchDraw?.();
+    // Also force a React re-render so any subsequent props win
+    setShapes((s) => s.slice());
+  };
 
   const getTouchPoints = (evt) => {
     const ts = evt.touches || [];
@@ -312,20 +342,9 @@ export default function Whiteboard() {
         drawingId.current = null;
       }
     }
-    // Stop konva-driven stage drag
-    const stage = stageRef.current;
-    if (stage?.isDragging?.()) stage.stopDrag();
-    // Stop any shape that was being dragged (select-mode + 1st-finger landed on a shape)
-    if (stage) {
-      const draggingNodes = stage.find((n) => n.isDragging && n.isDragging()) || [];
-      if (draggingNodes.length) {
-        pinchAbortDrag.current = true;
-        draggingNodes.forEach((n) => n.stopDrag());
-        // Force a re-render so node visual positions snap back to React state
-        setShapes((s) => s.slice());
-      }
-    }
-    // Also drop any current selection so the transformer doesn't get confused
+    // Stop any drag (stage or shape) synchronously
+    stopAllDrags();
+    // Drop any current selection
     setSelectedId(null);
     const dx = pts[1].x - pts[0].x;
     const dy = pts[1].y - pts[0].y;
@@ -373,6 +392,9 @@ export default function Whiteboard() {
     const remaining = e.evt.touches?.length ?? 0;
     if (remaining < 2) {
       pinchRef.current = { active: false, lastDist: 0, lastCenter: null };
+      // If a finger is still down, ignore it until all touches lift,
+      // otherwise Konva will restart shape drag on the lone finger.
+      if (remaining > 0) postPinchRef.current = true;
     }
     return true;
   };
@@ -482,6 +504,12 @@ export default function Whiteboard() {
     // Two-finger touch -> pinch zoom + pan, takes priority over drawing
     if (e.evt?.touches && e.evt.touches.length >= 2) {
       handlePinchStart(e);
+      return;
+    }
+    // Post-pinch: ignore lingering single touch until all fingers lift
+    if (postPinchRef.current) {
+      e.evt?.preventDefault?.();
+      stopAllDrags();
       return;
     }
     const isOnEmpty = e.target === stage || e.target.id?.() === "background";
@@ -601,14 +629,23 @@ export default function Whiteboard() {
   };
 
   const handleStageMouseMove = (e) => {
-    // Pinch in progress?
-    if (pinchRef.current.active) {
-      handlePinchMove(e);
+    // 2+ touches anywhere -> pinch wins, kill any active drag
+    if (e?.evt?.touches && e.evt.touches.length >= 2) {
+      if (!pinchRef.current.active) {
+        handlePinchStart(e);
+      } else {
+        handlePinchMove(e);
+      }
       return;
     }
-    // If a 2nd finger lands during a drag, switch to pinch
-    if (e?.evt?.touches && e.evt.touches.length >= 2) {
-      handlePinchStart(e);
+    // Pinch in progress with <2 touches (degenerate) -> still ignore
+    if (pinchRef.current.active) {
+      return;
+    }
+    // Post-pinch: ignore single lingering finger, kill any drag
+    if (postPinchRef.current) {
+      e?.evt?.preventDefault?.();
+      stopAllDrags();
       return;
     }
     if (!isDrawing.current) return;
@@ -654,6 +691,12 @@ export default function Whiteboard() {
       handlePinchEnd(e || { evt: { touches: [] } });
       return;
     }
+    // Clear post-pinch lock once all fingers are off
+    if (postPinchRef.current) {
+      const remaining = e?.evt?.touches?.length ?? 0;
+      if (remaining === 0) postPinchRef.current = false;
+      return;
+    }
     if (!isDrawing.current) return;
     isDrawing.current = false;
     const id = drawingId.current;
@@ -684,6 +727,16 @@ export default function Whiteboard() {
   };
 
   // ---- Shape interactions ----
+  const onShapeDragMove = (e) => {
+    // If a pinch is in progress (or two fingers are on screen), stop dragging immediately
+    const ne = e?.evt;
+    const twoTouches = ne?.touches && ne.touches.length >= 2;
+    if (pinchRef.current.active || postPinchRef.current || twoTouches) {
+      pinchAbortDrag.current = true;
+      e.target.stopDrag();
+    }
+  };
+
   const onShapeClick = (e, id) => {
     if (tool !== "select") return;
     e.cancelBubble = true;
@@ -972,6 +1025,7 @@ export default function Whiteboard() {
               draggable: tool === "select",
               onClick: (e) => onShapeClick(e, sh.id),
               onTap: (e) => onShapeClick(e, sh.id),
+              onDragMove: onShapeDragMove,
               onDragEnd: (e) => onShapeDragEnd(e, sh.id),
               onTransformEnd: (e) => onShapeTransformEnd(e, sh.id),
               listening: tool === "select" || tool === "eraser",
