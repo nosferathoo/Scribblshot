@@ -286,6 +286,7 @@ export default function Whiteboard() {
 
   // ---- Pinch / two-finger pan (touch) ----
   const pinchRef = useRef({ active: false, lastDist: 0, lastCenter: null });
+  const pinchAbortDrag = useRef(false);
 
   const getTouchPoints = (evt) => {
     const ts = evt.touches || [];
@@ -311,8 +312,21 @@ export default function Whiteboard() {
         drawingId.current = null;
       }
     }
-    // Stop konva-driven stage drag if it had started on the first touch
-    if (stageRef.current?.isDragging?.()) stageRef.current.stopDrag();
+    // Stop konva-driven stage drag
+    const stage = stageRef.current;
+    if (stage?.isDragging?.()) stage.stopDrag();
+    // Stop any shape that was being dragged (select-mode + 1st-finger landed on a shape)
+    if (stage) {
+      const draggingNodes = stage.find((n) => n.isDragging && n.isDragging()) || [];
+      if (draggingNodes.length) {
+        pinchAbortDrag.current = true;
+        draggingNodes.forEach((n) => n.stopDrag());
+        // Force a re-render so node visual positions snap back to React state
+        setShapes((s) => s.slice());
+      }
+    }
+    // Also drop any current selection so the transformer doesn't get confused
+    setSelectedId(null);
     const dx = pts[1].x - pts[0].x;
     const dy = pts[1].y - pts[0].y;
     pinchRef.current = {
@@ -677,6 +691,10 @@ export default function Whiteboard() {
   };
 
   const onShapeDragEnd = (e, id) => {
+    if (pinchAbortDrag.current) {
+      pinchAbortDrag.current = false;
+      return;
+    }
     const node = e.target;
     setShapes((s) =>
       s.map((sh) =>
@@ -686,6 +704,13 @@ export default function Whiteboard() {
   };
 
   const onShapeTransformEnd = (e, id) => {
+    if (pinchAbortDrag.current) {
+      pinchAbortDrag.current = false;
+      e.target.scaleX(1);
+      e.target.scaleY(1);
+      setShapes((s) => s.slice());
+      return;
+    }
     const node = e.target;
     setShapes((s) =>
       s.map((sh) => {
@@ -1003,6 +1028,10 @@ export default function Whiteboard() {
                   rotation={sh.rotation || 0}
                   // Override drag/transform position handling for ellipse so origin remains top-left semantics
                   onDragEnd={(e) => {
+                    if (pinchAbortDrag.current) {
+                      pinchAbortDrag.current = false;
+                      return;
+                    }
                     const node = e.target;
                     const newX = node.x() - sh.width / 2;
                     const newY = node.y() - sh.height / 2;
@@ -1013,6 +1042,13 @@ export default function Whiteboard() {
                     );
                   }}
                   onTransformEnd={(e) => {
+                    if (pinchAbortDrag.current) {
+                      pinchAbortDrag.current = false;
+                      e.target.scaleX(1);
+                      e.target.scaleY(1);
+                      setShapes((s) => s.slice());
+                      return;
+                    }
                     const node = e.target;
                     const sx = node.scaleX();
                     const sy = node.scaleY();
