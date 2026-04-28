@@ -284,6 +284,85 @@ export default function Whiteboard() {
 
   const center = () => toWorld(size.w / 2, size.h / 2);
 
+  // ---- Pinch / two-finger pan (touch) ----
+  const pinchRef = useRef({ active: false, lastDist: 0, lastCenter: null });
+
+  const getTouchPoints = (evt) => {
+    const ts = evt.touches || [];
+    if (ts.length < 2) return null;
+    const stage = stageRef.current;
+    const rect = stage.container().getBoundingClientRect();
+    return [
+      { x: ts[0].clientX - rect.left, y: ts[0].clientY - rect.top },
+      { x: ts[1].clientX - rect.left, y: ts[1].clientY - rect.top },
+    ];
+  };
+
+  const handlePinchStart = (e) => {
+    const pts = getTouchPoints(e.evt);
+    if (!pts) return false;
+    e.evt.preventDefault();
+    // Cancel any active drawing
+    if (isDrawing.current) {
+      isDrawing.current = false;
+      if (drawingId.current) {
+        const id = drawingId.current;
+        setShapes((s) => s.filter((sh) => sh.id !== id));
+        drawingId.current = null;
+      }
+    }
+    // Stop konva-driven stage drag if it had started on the first touch
+    if (stageRef.current?.isDragging?.()) stageRef.current.stopDrag();
+    const dx = pts[1].x - pts[0].x;
+    const dy = pts[1].y - pts[0].y;
+    pinchRef.current = {
+      active: true,
+      lastDist: Math.hypot(dx, dy),
+      lastCenter: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
+    };
+    return true;
+  };
+
+  const handlePinchMove = (e) => {
+    if (!pinchRef.current.active) return false;
+    const pts = getTouchPoints(e.evt);
+    if (!pts) return false;
+    e.evt.preventDefault();
+    const dx = pts[1].x - pts[0].x;
+    const dy = pts[1].y - pts[0].y;
+    const newDist = Math.hypot(dx, dy);
+    const newCenter = {
+      x: (pts[0].x + pts[1].x) / 2,
+      y: (pts[0].y + pts[1].y) / 2,
+    };
+    const last = pinchRef.current;
+    if (last.lastDist > 0 && last.lastCenter) {
+      const ratio = newDist / last.lastDist;
+      const oldScale = stageScale;
+      const newScale = clamp(oldScale * ratio, MIN_SCALE, MAX_SCALE);
+      // World point under the previous center stays anchored under the new center
+      const worldX = (last.lastCenter.x - stagePos.x) / oldScale;
+      const worldY = (last.lastCenter.y - stagePos.y) / oldScale;
+      setStageScale(newScale);
+      setStagePos({
+        x: newCenter.x - worldX * newScale,
+        y: newCenter.y - worldY * newScale,
+      });
+    }
+    pinchRef.current.lastDist = newDist;
+    pinchRef.current.lastCenter = newCenter;
+    return true;
+  };
+
+  const handlePinchEnd = (e) => {
+    if (!pinchRef.current.active) return false;
+    const remaining = e.evt.touches?.length ?? 0;
+    if (remaining < 2) {
+      pinchRef.current = { active: false, lastDist: 0, lastCenter: null };
+    }
+    return true;
+  };
+
   // ---- Add image ----
   const addImageAtCenter = async (dataUrl) => {
     const dims = await loadImageDims(dataUrl);
@@ -386,6 +465,11 @@ export default function Whiteboard() {
   const handleStageMouseDown = (e) => {
     const stage = stageRef.current;
     if (!stage) return;
+    // Two-finger touch -> pinch zoom + pan, takes priority over drawing
+    if (e.evt?.touches && e.evt.touches.length >= 2) {
+      handlePinchStart(e);
+      return;
+    }
     const isOnEmpty = e.target === stage || e.target.id?.() === "background";
     const pos = stage.getPointerPosition();
     const world = toWorld(pos.x, pos.y);
@@ -502,7 +586,17 @@ export default function Whiteboard() {
     }
   };
 
-  const handleStageMouseMove = () => {
+  const handleStageMouseMove = (e) => {
+    // Pinch in progress?
+    if (pinchRef.current.active) {
+      handlePinchMove(e);
+      return;
+    }
+    // If a 2nd finger lands during a drag, switch to pinch
+    if (e?.evt?.touches && e.evt.touches.length >= 2) {
+      handlePinchStart(e);
+      return;
+    }
     if (!isDrawing.current) return;
     const stage = stageRef.current;
     const pos = stage.getPointerPosition();
@@ -541,7 +635,11 @@ export default function Whiteboard() {
     );
   };
 
-  const handleStageMouseUp = () => {
+  const handleStageMouseUp = (e) => {
+    if (pinchRef.current.active) {
+      handlePinchEnd(e || { evt: { touches: [] } });
+      return;
+    }
     if (!isDrawing.current) return;
     isDrawing.current = false;
     const id = drawingId.current;
