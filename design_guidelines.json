@@ -1,0 +1,95 @@
+{
+  "theme": "light",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "vibe": "A pristine, highly functional digital drafting board. Minimal UI that stays out of the way, focusing entirely on the canvas content.",
+  "colors": {
+    "canvas_bg": "#F9F9F9",
+    "canvas_grid": "rgba(0, 0, 0, 0.05)",
+    "ui_surface": "rgba(255, 255, 255, 0.9)",
+    "ui_border": "rgba(0, 0, 0, 0.08)",
+    "text_primary": "#0A0A0A",
+    "text_secondary": "#737373",
+    "accent_active": "#0A0A0A",
+    "accent_focus": "#0055FF",
+    "danger": "#EF4444"
+  },
+  "typography": {
+    "font_family": "Outfit, sans-serif",
+    "headings": "text-lg font-medium tracking-tight text-[#0A0A0A]",
+    "body": "text-sm text-[#737373]",
+    "labels": "text-xs font-semibold tracking-wider uppercase text-[#737373]"
+  },
+  "spacing_layout": {
+    "global": "h-screen w-screen overflow-hidden bg-[#F9F9F9] relative",
+    "top_bar": "absolute top-4 left-4 right-4 flex justify-between items-center z-50 pointer-events-none",
+    "top_bar_items": "pointer-events-auto flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-black/5 shadow-sm rounded-xl p-2",
+    "bottom_toolbar": "absolute bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-1 bg-white/90 backdrop-blur-xl border border-black/5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] rounded-full px-3 py-2",
+    "context_menu": "absolute z-50 pointer-events-auto flex flex-col gap-2 bg-white border border-black/5 shadow-lg rounded-2xl p-3 w-48",
+    "canvas_element": "absolute inset-0 z-0 touch-none"
+  },
+  "ui_components": {
+    "toolbar_button": {
+      "base": "p-2.5 rounded-full transition-all duration-200 flex items-center justify-center relative group",
+      "default": "text-[#737373] hover:bg-black/5 hover:text-[#0A0A0A]",
+      "active": "bg-[#0A0A0A] text-white shadow-md",
+      "disabled": "opacity-50 cursor-not-allowed"
+    },
+    "canvas_selection_box": {
+      "border": "2px solid #0055FF",
+      "handle": "w-3 h-3 bg-white border-2 border-[#0055FF] rounded-sm shadow-sm"
+    },
+    "color_picker_swatch": "w-6 h-6 rounded-full border border-black/10 cursor-pointer hover:scale-110 transition-transform"
+  },
+  "animations": {
+    "toolbar_entrance": "animate-in slide-in-from-bottom-8 fade-in duration-500 ease-out-spring",
+    "popover_entrance": "animate-in zoom-in-95 fade-in duration-200 ease-out",
+    "hover_scale": "hover:scale-105 active:scale-95 transition-transform"
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "list": [
+        "MousePointer2 (Select)",
+        "Hand (Pan)",
+        "PenTool (Draw)",
+        "Highlighter",
+        "Eraser",
+        "Square",
+        "Circle",
+        "Type (Text)",
+        "Image (Upload/Paste)",
+        "MonitorUp (Screen Capture)",
+        "Undo2",
+        "Redo2",
+        "Download (Save JSON)",
+        "Upload (Load JSON)",
+        "Trash2 (Delete Selected)",
+        "Layers (Z-index/Bring forward)"
+      ]
+    },
+    "fonts": {
+      "import_url": "https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+    }
+  },
+  "implementation_rules": {
+    "canvas_engine": "Strongly recommend using 'react-konva' and 'use-image' for the canvas rendering, shape management, and transformations (Transformer component in Konva makes selection/rotate/scale trivial).",
+    "pwa": "Include a manifest.json and a basic service worker for offline support. App must cache assets and run disconnected.",
+    "storage": "Use localforage or direct IndexedDB for auto-saving the board state (JSON). Base64 images must be stored within the JSON structure or as separate blobs referenced in the JSON.",
+    "screen_capture": "Implement using navigator.mediaDevices.getDisplayMedia({ video: true }). Draw the first captured frame to a hidden canvas, extract the dataURL, and add it to the board as an Image object. Stop the stream immediately after capture.",
+    "grid_background": "Implement the dot grid using a CSS background on a div behind the canvas: background-image: radial-gradient(#E5E5E5 1px, transparent 1px); background-size: 40px 40px; Map background-position to the canvas pan offset, and background-size to the zoom level.",
+    "testing": "All UI buttons must have data-testid attributes (e.g., data-testid='tool-pen', data-testid='btn-capture').",
+    "accessibility": "Floating UI elements must be keyboard navigable. Popovers should trap focus where applicable. Use Radix UI / Shadcn for Dialogs (Save/Load/Clear) and Popovers (Color/Stroke pickers)."
+  },
+  "instructions_to_main_agent": [
+    "Set up a full-screen React application with no scrolling (overflow-hidden) on the body.",
+    "Install lucide-react for icons.",
+    "Install react-konva and konva for the canvas layer, as building an infinite canvas with select/scale/rotate from scratch with pure HTML5 canvas is error-prone and slow.",
+    "Implement the floating UI overlay using absolute positioning on top of the Konva Stage.",
+    "For the tools (Pen, Shapes, etc.), maintain an active state in a context or custom hook.",
+    "When an object (Image, Text, Shape, Scribble) is selected, show the bounding box with standard Konva Transformer, styled to match the #0055FF brand color.",
+    "Handle image pasting via window 'paste' event (clipboardData) and read it as a Base64 URL to insert into the canvas.",
+    "Implement screen capture button using getDisplayMedia, take one frame, and insert.",
+    "For the PWA, ensure next.config.js (or Vite plugin pwa) is configured properly to generate a manifest and SW.",
+    "Strictly follow the styling in the design_guidelines for the UI to keep it minimal and high-contrast."
+  ]
+}
