@@ -408,21 +408,6 @@ export default function Whiteboard() {
     if (tool === "text") {
       const id = uid();
       const fontSize = 24;
-      const newShape = {
-        id,
-        type: "text",
-        x: world.x,
-        y: world.y,
-        text: "",
-        fontSize,
-        fill: color,
-        rotation: 0,
-        scaleX: 1,
-        scaleY: 1,
-        width: 240,
-      };
-      pushHistory();
-      setShapes((s) => [...s, newShape]);
       setEditingText({
         id,
         worldX: world.x,
@@ -745,12 +730,35 @@ export default function Whiteboard() {
   const finishEditingText = (commitValue) => {
     if (!editingText) return;
     const value = (commitValue ?? editingText.value).trim();
-    setShapes((s) => {
-      if (!value) return s.filter((sh) => sh.id !== editingText.id);
-      return s.map((sh) =>
-        sh.id === editingText.id ? { ...sh, text: value } : sh
-      );
-    });
+    if (editingText.isNew) {
+      // Adding fresh text shape if non-empty
+      if (value) {
+        pushHistory();
+        setShapes((s) => [
+          ...s,
+          {
+            id: editingText.id,
+            type: "text",
+            x: editingText.worldX,
+            y: editingText.worldY,
+            text: value,
+            fontSize: editingText.fontSize,
+            fill: editingText.color,
+            rotation: 0,
+            scaleX: 1,
+            scaleY: 1,
+          },
+        ]);
+      }
+    } else {
+      // Updating existing text shape
+      setShapes((s) => {
+        if (!value) return s.filter((sh) => sh.id !== editingText.id);
+        return s.map((sh) =>
+          sh.id === editingText.id ? { ...sh, text: value } : sh
+        );
+      });
+    }
     setEditingText(null);
   };
 
@@ -949,14 +957,13 @@ export default function Whiteboard() {
               );
             }
             if (sh.type === "text") {
-              const isEditing = editingText?.id === sh.id;
               return (
                 <KText
                   key={sh.id}
                   {...common}
                   x={sh.x}
                   y={sh.y}
-                  text={isEditing ? "" : sh.text || ""}
+                  text={editingText?.id === sh.id ? "" : sh.text || ""}
                   fontSize={sh.fontSize}
                   fill={sh.fill}
                   fontFamily="Outfit, sans-serif"
@@ -1001,18 +1008,28 @@ export default function Whiteboard() {
       {editingText && editorScreen && (
         <textarea
           autoFocus
+          ref={(el) => {
+            if (el && !el.dataset.ready) {
+              el.dataset.ready = "false";
+              setTimeout(() => {
+                el.dataset.ready = "true";
+                el.focus();
+              }, 60);
+            }
+          }}
           data-testid="text-editor"
           value={editingText.value}
           placeholder="Type…"
           onChange={(e) =>
             setEditingText((p) => ({ ...p, value: e.target.value }))
           }
-          onBlur={() => finishEditingText()}
+          onBlur={(e) => {
+            // Ignore initial blur right after opening (focus may have been intercepted by mouseup)
+            if (e.currentTarget?.dataset?.ready !== "true") return;
+            finishEditingText();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
-              if (editingText.isNew) {
-                setShapes((s) => s.filter((x) => x.id !== editingText.id));
-              }
               setEditingText(null);
             }
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
